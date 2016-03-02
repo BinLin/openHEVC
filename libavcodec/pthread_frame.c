@@ -54,13 +54,13 @@
  * Context used by codec threads and stored in their AVCodecInternal thread_ctx_frame.
  */
 typedef struct PerThreadContext {
-    struct FrameThreadContext *parent;
+    struct FrameThreadContext *parent;  //!< 指向线程池数据结构
 
-    pthread_t      thread;
-    int            thread_init;
-    pthread_cond_t input_cond;      ///< Used to wait for a new packet from the main thread.
-    pthread_cond_t progress_cond;   ///< Used by child threads to wait for progress to change.
-    pthread_cond_t output_cond;     ///< Used by the main thread to wait for frames to finish.
+    pthread_t      thread;          //!< 线程ID
+    int            thread_init;     //!< thread 是否init
+    pthread_cond_t input_cond;      ///< Used to wait for a new packet from the main thread.主线程通知相应的解码线程,数据包已经准备好,解码线程可以开始解码
+    pthread_cond_t progress_cond;   ///< Used by child threads to wait for progress to change.用于通知线程状态改变
+    pthread_cond_t output_cond;     ///< Used by the main thread to wait for frames to finish.用于解码线程通知主线程输出已经准备好
 
     pthread_mutex_t mutex;          ///< Mutex used to protect the contents of the PerThreadContext.
     pthread_mutex_t progress_mutex; ///< Mutex used to protect frame progress values and progress_cond.
@@ -69,13 +69,13 @@ typedef struct PerThreadContext {
 
     AVPacket       avpkt;           ///< Input packet (for decoding) or output (for encoding).
 
-    AVFrame *frame;                 ///< Output frame (for decoding) or input (for encoding).
+    AVFrame *frame;                 ///< Output frame (for decoding) or input (for encoding).存储解码后的数据(解码器)
     int     got_frame;              ///< The output of got_picture_ptr from the last avcodec_decode_video() call.
     int     result;                 ///< The result of the last codec decode/encode() call.
 
     enum {
-        STATE_INPUT_READY,          ///< Set when the thread is awaiting a packet.
-        STATE_SETTING_UP,           ///< Set before the codec has called ff_thread_finish_setup().
+        STATE_INPUT_READY,          ///< Set when the thread is awaiting a packet.工作线程等待主线程分配数据包
+        STATE_SETTING_UP,           ///< Set before the codec has called ff_thread_finish_setup().主线程给工作线程分配好数据包,工作线程解码
         STATE_GET_BUFFER,           /**<
                                      * Set when the codec calls get_buffer().
                                      * State is returned to STATE_SETTING_UP afterwards.
@@ -84,8 +84,8 @@ typedef struct PerThreadContext {
                                      * Set when the codec calls get_format().
                                      * State is returned to STATE_SETTING_UP afterwards.
                                      */
-        STATE_SETUP_FINISHED        ///< Set after the codec has called ff_thread_finish_setup().
-    } state;
+        STATE_SETUP_FINISHED        ///< Set after the codec has called ff_thread_finish_setup().工作线程完成解码,通知主线程可以输出
+    } state;   //!< 初创建的线程的state为默认值STATE_INPUT_READY
 
     /**
      * Array of frames passed to ff_thread_release_buffer().
@@ -106,10 +106,10 @@ typedef struct PerThreadContext {
  * Context stored in the client AVCodecInternal thread_ctx_frame.
  */
 typedef struct FrameThreadContext {
-    PerThreadContext *threads;     ///< The contexts for each thread.
+    PerThreadContext *threads;     ///< The contexts for each thread.链表保存指向线程池的每个线程
     PerThreadContext *prev_thread; ///< The last thread submit_packet() was called on.
 
-    pthread_mutex_t buffer_mutex;  ///< Mutex used to protect get/release_buffer().
+    pthread_mutex_t buffer_mutex;  ///< Mutex used to protect get/release_buffer().互斥锁
 
     int next_decoding;             ///< The next context to submit a packet to.
     int next_finished;             ///< The next context to return output from.
@@ -151,18 +151,18 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
     const AVCodec *codec = avctx->codec;
 
     pthread_mutex_lock(&p->mutex);
-    while (1) {
-            while (p->state == STATE_INPUT_READY && !fctx->die)
+    while (1) {  //!< p->state的初始默认值为STATE_INPUT_READY
+            while (p->state == STATE_INPUT_READY && !fctx->die)  //!< 等待用户线程给当前线程提交数据包
                 pthread_cond_wait(&p->input_cond, &p->mutex);
 
         if (fctx->die) break;
 
-        if (!codec->update_thread_context && THREAD_SAFE_CALLBACKS(avctx))
-            ff_thread_finish_setup(avctx);
+        if (!codec->update_thread_context && THREAD_SAFE_CALLBACKS(avctx))  //!< 判断是否可以帧级并行
+            ff_thread_finish_setup(avctx);   //!< 更改当前工作线程的状态,通知主线程可以让下一个线程开始工作解码
 
         av_frame_unref(p->frame);
         p->got_frame = 0;
-        p->result = codec->decode(avctx, p->frame, &p->got_frame, &p->avpkt);
+        p->result = codec->decode(avctx, p->frame, &p->got_frame, &p->avpkt); //!< 解码过程
 
         if ((p->result < 0 || !p->got_frame) && p->frame->buf[0]) {
             if (avctx->internal->allocate_progress)
@@ -183,8 +183,8 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
 #endif
         p->state = STATE_INPUT_READY;
 
-        pthread_cond_broadcast(&p->progress_cond);
-        pthread_cond_signal(&p->output_cond);
+        pthread_cond_broadcast(&p->progress_cond);  //!< 通知等待线程,该线程状态已经改变
+        pthread_cond_signal(&p->output_cond);       //!< 通知主线程,该线程输出已经准备好
         pthread_mutex_unlock(&p->progress_mutex);
     }
     pthread_mutex_unlock(&p->mutex);
@@ -325,36 +325,37 @@ static void release_delayed_buffers(PerThreadContext *p)
 static int submit_packet(PerThreadContext *p, AVPacket *avpkt)
 {
     FrameThreadContext *fctx = p->parent;
-    PerThreadContext *prev_thread = fctx->prev_thread;
+    PerThreadContext *prev_thread = fctx->prev_thread;  //!< 上一个接受数据包的线程
     const AVCodec *codec = p->avctx->codec;
 
     if (!avpkt->size && !(codec->capabilities & CODEC_CAP_DELAY)) return 0;
 
     pthread_mutex_lock(&p->mutex);
 
-    release_delayed_buffers(p);
+    release_delayed_buffers(p);  //!< 释放与当前线程相关的内存
 
     if (prev_thread) {
         int err;
-        if (prev_thread->state == STATE_SETTING_UP) {
-            pthread_mutex_lock(&prev_thread->progress_mutex);
+        if (prev_thread->state == STATE_SETTING_UP) {  //!< 需要等待前一个线程状态转为STATE_SETUP_FINISHED,现进行线程等待
+            pthread_mutex_lock(&prev_thread->progress_mutex);  //!< 互斥量保护条件
             while (prev_thread->state == STATE_SETTING_UP)
                 pthread_cond_wait(&prev_thread->progress_cond, &prev_thread->progress_mutex);
             pthread_mutex_unlock(&prev_thread->progress_mutex);
         }
 
-        err = update_context_from_thread(p->avctx, prev_thread->avctx, 0);
+        err = update_context_from_thread(p->avctx, prev_thread->avctx, 0); //!< 如果之前的线程状态变为 STATE_SETUP_FINISHED, 更新相关内容到当前线程
         if (err) {
             pthread_mutex_unlock(&p->mutex);
             return err;
         }
     }
 
-    av_packet_unref(&p->avpkt);
-    av_packet_ref(&p->avpkt, avpkt);
+    av_packet_unref(&p->avpkt); //!< 释放与p->avpkt相关联的动态分配的内存,并重新初始化
+    av_packet_ref(&p->avpkt, avpkt);  //!< 拷贝解码数据,以及相关参数
 
     p->state = STATE_SETTING_UP;
-    pthread_cond_signal(&p->input_cond);
+    //!< pthread_cond_signal(条件) 将唤醒等待该条件的某个线程,这里是线程p
+    pthread_cond_signal(&p->input_cond);//!< 发送码流输入准备好的信号给解码线程(pthread_cond_waite(&p->input_cond),让相应的解码线程解码
     pthread_mutex_unlock(&p->mutex);
 
     /*
@@ -401,28 +402,29 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     return 0;
 }
-
+//!< 帧级解码函数
 int ff_thread_decode_frame(AVCodecContext *avctx,
                            AVFrame *picture, int *got_picture_ptr,
                            AVPacket *avpkt)
 {
     FrameThreadContext *fctx = avctx->internal->thread_ctx_frame;
-    int finished = fctx->next_finished;
-    PerThreadContext *p;
+    int finished = fctx->next_finished;  //!< 下一个返回解码帧的线程序号
+    PerThreadContext *p;  //!< 编解码使用的线程,这些线程存储在 avctx->internal->thread_ctx_frame
     int err;
 
     /*
      * Submit a packet to the next decoding thread.
      */
 
-    p = &fctx->threads[fctx->next_decoding];
-    err = update_context_from_user(p->avctx, avctx);
+    p = &fctx->threads[fctx->next_decoding];  //!< 等待数据包的线程
+    err = update_context_from_user(p->avctx, avctx);  //!< 将用户提交的avctx复制到解码线程p->avctx里
     if (err) return err;
-    err = submit_packet(p, avpkt);
+    err = submit_packet(p, avpkt);  //!< 将数据码流交给对应的解码线程,来实现线程状态的改变
     if (err) return err;
 
     /*
      * If we're still receiving the initial packets, don't return a frame.
+     * 若线程池中的线程还没用完,则继续接收数据包,不输出
      */
 
     if (fctx->next_decoding > (avctx->thread_count_frame-1-(avctx->codec_id == AV_CODEC_ID_FFV1)))
@@ -444,14 +446,14 @@ int ff_thread_decode_frame(AVCodecContext *avctx,
     do {
         p = &fctx->threads[finished++];
 
-        if (p->state != STATE_INPUT_READY) {
-            pthread_mutex_lock(&p->progress_mutex);
+        if (p->state != STATE_INPUT_READY) { //!< 当前线程的数据状态不是STATE_INPUT_READY,等待该线程解码完数据包
+            pthread_mutex_lock(&p->progress_mutex);   //!< 上锁
             while (p->state != STATE_INPUT_READY)
-                pthread_cond_wait(&p->output_cond, &p->progress_mutex);
-            pthread_mutex_unlock(&p->progress_mutex);
+                pthread_cond_wait(&p->output_cond, &p->progress_mutex);  //!< 通知主线程,解码数据包已经准备好输出
+            pthread_mutex_unlock(&p->progress_mutex);  //!< 解锁
         }
 
-        av_frame_move_ref(picture, p->frame);
+        av_frame_move_ref(picture, p->frame);   //!< outPut_frame
         *got_picture_ptr = p->got_frame;
         picture->pkt_dts = p->avpkt.dts;
 
@@ -466,7 +468,7 @@ int ff_thread_decode_frame(AVCodecContext *avctx,
         if (finished >= avctx->thread_count_frame) finished = 0;
     } while (!avpkt->size && !*got_picture_ptr && finished != fctx->next_finished);
 
-    update_context_from_thread(avctx, p->avctx, 1);
+    update_context_from_thread(avctx, p->avctx, 1);  //!< 将线程提交的avctx复制到用户avctx里
 
     if (fctx->next_decoding >= avctx->thread_count_frame) fctx->next_decoding = 0;
 
@@ -490,7 +492,7 @@ void ff_thread_report_progress(ThreadFrame *f, int n, int field)
 
     pthread_mutex_lock(&p->progress_mutex);
     progress[field] = n;
-    pthread_cond_broadcast(&p->progress_cond);
+    pthread_cond_broadcast(&p->progress_cond);  //@! 以广播的方式,唤醒所有等待该条件的所有线程
     pthread_mutex_unlock(&p->progress_mutex);
 }
 
@@ -626,7 +628,7 @@ void ff_thread_report_il_status2(AVCodecContext *avxt, int poc, int status) {
 void ff_thread_finish_setup(AVCodecContext *avctx) {
     PerThreadContext *p = avctx->internal->thread_ctx_frame;
 
-    if (!(avctx->active_thread_type&FF_THREAD_FRAME)) return;
+    if (!(avctx->active_thread_type&FF_THREAD_FRAME)) return;  //!< 不支持frame并行,返回
 
     if(p->state == STATE_SETUP_FINISHED){
         av_log(avctx, AV_LOG_WARNING, "Multiple ff_thread_finish_setup() calls\n");
@@ -662,7 +664,7 @@ void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
     const AVCodec *codec = avctx->codec;
     int i;
 
-    park_frame_worker_threads(fctx, thread_count);
+    park_frame_worker_threads(fctx, thread_count); //!< 等待所有线程工作完成,接下来才可以释放
 
     if (fctx->prev_thread && fctx->prev_thread != fctx->threads)
         if (update_context_from_thread(fctx->threads->avctx, fctx->prev_thread->avctx, 0) < 0) {
@@ -736,7 +738,7 @@ int ff_frame_thread_init(AVCodecContext *avctx)
         if ((avctx->debug & (FF_DEBUG_VIS_QP | FF_DEBUG_VIS_MB_TYPE)) || avctx->debug_mv)
             nb_cpus = 1;
         // use number of cores + 1 as thread count if there is more than one
-        if (nb_cpus > 1)
+        if (nb_cpus > 1) //!< CPU个数大于1时,设置线程个数 = nb_cpu + 1
             thread_count = avctx->thread_count_frame = FFMIN(nb_cpus + 1, MAX_AUTO_THREADS);
         else
             thread_count = avctx->thread_count_frame = 1;
@@ -746,15 +748,15 @@ int ff_frame_thread_init(AVCodecContext *avctx)
         avctx->active_thread_type = 0;
         return 0;
     }
-
+    //!< 线程池数据结构
     avctx->internal->thread_ctx_frame = fctx = av_mallocz(sizeof(FrameThreadContext));
-
+    //!< 给线程池的线程分配内存
     fctx->threads = av_mallocz(sizeof(PerThreadContext) * thread_count);
     pthread_mutex_init(&fctx->buffer_mutex, NULL);
     pthread_cond_init(&fctx->il_progress_cond, NULL);
     pthread_mutex_init(&fctx->il_progress_mutex, NULL);
     fctx->delaying = 1;
-
+    //!< 线程池内的线程依次初始化
     for (i = 0; i < thread_count; i++) {
         AVCodecContext *copy = av_malloc(sizeof(AVCodecContext));
         PerThreadContext *p  = &fctx->threads[i];
@@ -791,17 +793,17 @@ int ff_frame_thread_init(AVCodecContext *avctx)
         copy->internal->thread_ctx_frame = p;
         copy->internal->pkt = &p->avpkt;
 
-        if (avctx->active_thread_type&FF_THREAD_SLICE)
+        if (avctx->active_thread_type&FF_THREAD_SLICE)  //!< SLice 级别并行初始化
             ff_slice_thread_init(copy);
 
-        if (!i) {
+        if (!i) {  //!< 初始化线程池的第一个线程的priv_data指向用户线程的priv_data
             src = copy;
 
             if (codec->init)
                 err = codec->init(copy);
 
-            update_context_from_thread(avctx, copy, 1);
-        } else {
+            update_context_from_thread(avctx, copy, 1);//!< 更新到主线程的解码上下文
+        } else {   //!< 将主线程的priv_data复制给线程池除第一个线程之外的其余线程的priv_data
             copy->priv_data = av_malloc(codec->priv_data_size);
             if (!copy->priv_data) {
                 err = AVERROR(ENOMEM);

@@ -39,13 +39,13 @@ struct HEVCWindow;
 #define I_OFFSET (1 << (N_SHIFT - 1))
 
 typedef struct SAOParams {
-    uint8_t offset_abs[3][4];   ///< sao_offset_abs
-    uint8_t offset_sign[3][4];  ///< sao_offset_sign
+    uint8_t offset_abs[3][4];   ///< sao_offset_abs,带状补偿或者边缘补偿的4个绝对值
+    uint8_t offset_sign[3][4];  ///< sao_offset_sign, 符号
 
-    uint8_t band_position[3];   ///< sao_band_position
+    uint8_t band_position[3];   ///< sao_band_position,带状补偿
     int16_t offset_val[3][5];   ///<SaoOffsetVal
 
-    uint8_t eo_class[3];        ///< sao_eo_class
+    uint8_t eo_class[3];        ///< sao_eo_class,边缘补偿
     uint8_t type_idx[3];        ///< sao_type_idx
 } SAOParams;
 

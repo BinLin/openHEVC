@@ -1107,12 +1107,12 @@ do {                                                    \
         sao->elem = 0;                                  \
 } while (0)
 
-static void hls_sao_param(HEVCContext *s, int rx, int ry)
+static void hls_sao_param(HEVCContext *s, int rx, int ry)   //!< rx 与 ry 为当前CTb块在图像中的坐标
 {
     HEVCLocalContext *lc    = s->HEVClc;
     int sao_merge_left_flag = 0;
     int sao_merge_up_flag   = 0;
-    SAOParams *sao          = &CTB(s->sao, rx, ry);
+    SAOParams *sao          = &CTB(s->sao, rx, ry);   //!< 计算在图像中对应的像素点
     int c_idx, i;
 
     if (s->sh.slice_sample_adaptive_offset_flag[0] ||
@@ -1149,7 +1149,7 @@ static void hls_sao_param(HEVCContext *s, int rx, int ry)
         for (i = 0; i < 4; i++)
             SET_SAO(offset_abs[c_idx][i], ff_hevc_sao_offset_abs_decode(s));
 
-        if (sao->type_idx[c_idx] == SAO_BAND) {
+        if (sao->type_idx[c_idx] == SAO_BAND) { //!< 带状补偿
             for (i = 0; i < 4; i++) {
                 if (sao->offset_abs[c_idx][i]) {
                     SET_SAO(offset_sign[c_idx][i],
@@ -2467,7 +2467,15 @@ static int hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 
     return 0;
 }
-
+/*
+ * function: hls_coding_quatree()
+ * parameter:
+ *     s:        		----HEVC解码参数结构体
+ *     x0:       		----CTB块在图像中的横坐标
+ *     y0:       		----CTB块在图像中的纵坐标
+ *     log2_cb_size:	----log2 CTB 的大小
+ *     cb_depth:		----当前CTB的劈分深度,(从CTU到当前CTB的劈分次数)
+ */
 static int hls_coding_quadtree(HEVCContext *s, int x0, int y0,
                                int log2_cb_size, int cb_depth)
 {
@@ -2481,7 +2489,7 @@ static int hls_coding_quadtree(HEVCContext *s, int x0, int y0,
     if (x0 + cb_size <= s->sps->width  &&
         y0 + cb_size <= s->sps->height &&
         log2_cb_size > s->sps->log2_min_cb_size) {
-        split_cu_flag = ff_hevc_split_coding_unit_flag_decode(s, cb_depth, x0, y0);
+        split_cu_flag = ff_hevc_split_coding_unit_flag_decode(s, cb_depth, x0, y0);  //!< 是否劈分标识
     } else {
         split_cu_flag = (log2_cb_size > s->sps->log2_min_cb_size);
     }
@@ -2495,7 +2503,7 @@ static int hls_coding_quadtree(HEVCContext *s, int x0, int y0,
         log2_cb_size >= s->sps->log2_ctb_size - s->pps->diff_cu_chroma_qp_offset_depth) {
         lc->tu.is_cu_chroma_qp_offset_coded = 0;
 	}
-    if (split_cu_flag) {
+    if (split_cu_flag) {    //!< 劈分,四次递归
         const int cb_size_split = cb_size >> 1;
         const int x1 = x0 + cb_size_split;
         const int y1 = y0 + cb_size_split;
@@ -2532,7 +2540,7 @@ static int hls_coding_quadtree(HEVCContext *s, int x0, int y0,
                     (y1 + cb_size_split) < s->sps->height);
         else
             return 0;
-    } else {
+    } else {  //!< 解码CU单元
         ret = hls_coding_unit(s, x0, y0, log2_cb_size);
         if (ret < 0)
             return ret;
@@ -2558,7 +2566,7 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb,
     HEVCLocalContext *lc  = s->HEVClc;
     int ctb_size          = 1 << s->sps->log2_ctb_size;
     int ctb_addr_rs       = s->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
-    int ctb_addr_in_slice = ctb_addr_rs - s->sh.slice_addr;
+    int ctb_addr_in_slice = ctb_addr_rs - s->sh.slice_addr; //!< 以CTU为单位,距离所在Slice第一个块的大小
 
     int tile_left_boundary, tile_up_boundary;
     int slice_left_boundary, slice_up_boundary;
@@ -2594,7 +2602,7 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb,
         tile_left_boundary =
         tile_up_boundary   = 0;
         slice_left_boundary = ctb_addr_in_slice <= 0;
-        slice_up_boundary   = ctb_addr_in_slice < s->sps->ctb_width;
+        slice_up_boundary   = ctb_addr_in_slice < s->sps->ctb_width;  //!< 说明它支持的Slice都是在第一列CTU为起点
     }
     lc->slice_or_tiles_left_boundary = slice_left_boundary + (tile_left_boundary << 1);
     lc->slice_or_tiles_up_boundary   = slice_up_boundary   + (tile_up_boundary   << 1);
@@ -2603,15 +2611,15 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb,
     lc->ctb_up_right_flag = ((y_ctb > 0)                 && (ctb_addr_in_slice+1 >= s->sps->ctb_width) && (s->pps->tile_id[ctb_addr_ts] == s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[ctb_addr_rs+1 - s->sps->ctb_width]]));
     lc->ctb_up_left_flag  = ((x_ctb > 0) && (y_ctb > 0)  && (ctb_addr_in_slice-1 >= s->sps->ctb_width) && (s->pps->tile_id[ctb_addr_ts] == s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[ctb_addr_rs-1 - s->sps->ctb_width]]));
 }
-
+//!< 完成SLice的解码工作
 static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
 {
     HEVCContext *s  = avctxt->priv_data;
-    int ctb_size    = 1 << s->sps->log2_ctb_size;
+    int ctb_size    = 1 << s->sps->log2_ctb_size;    //!< CTU的Size
     int more_data   = 1;
     int x_ctb       = 0;
     int y_ctb       = 0;
-    int ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs];
+    int ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs]; //!<  rs(光栅扫描) 顺序转为 ts(Z扫描)顺序
 
     if (!ctb_addr_ts && s->sh.dependent_slice_segment_flag) {
         av_log(s->avctx, AV_LOG_ERROR, "Impossible initial tile.\n");
@@ -2628,15 +2636,15 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
 
     while (more_data && ctb_addr_ts < s->sps->ctb_size) {
         int ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
-
+        //!< CTB 的x,y坐标
         x_ctb = FFUMOD(ctb_addr_rs, s->sps->ctb_width) << s->sps->log2_ctb_size;
         y_ctb = FFUDIV(ctb_addr_rs, s->sps->ctb_width) << s->sps->log2_ctb_size;
-        hls_decode_neighbour(s, x_ctb, y_ctb, ctb_addr_ts);
+        hls_decode_neighbour(s, x_ctb, y_ctb, ctb_addr_ts);  //!< 初始化周围块是否可用标识
 
-        ff_hevc_cabac_init(s, ctb_addr_ts);
-
+        ff_hevc_cabac_init(s, ctb_addr_ts);  //!< 初始化熵解码
+        //!< 计算样点自适应补偿参数
         hls_sao_param(s, x_ctb >> s->sps->log2_ctb_size, y_ctb >> s->sps->log2_ctb_size);
-
+        //!< 去方块滤波,以CTU为单位
         s->deblock[ctb_addr_rs].beta_offset = s->sh.beta_offset;
         s->deblock[ctb_addr_rs].tc_offset   = s->sh.tc_offset;
         s->filter_slice_edges[ctb_addr_rs]  = s->sh.slice_loop_filter_across_slices_enabled_flag;
@@ -2648,8 +2656,8 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
         }
 
         ctb_addr_ts++;
-        ff_hevc_save_states(s, ctb_addr_ts);
-        ff_hevc_hls_filters(s, x_ctb, y_ctb, ctb_size);
+        ff_hevc_save_states(s, ctb_addr_ts);  //!< 保存解码信息供后续使用
+        ff_hevc_hls_filters(s, x_ctb, y_ctb, ctb_size);  //!< 去方块滤波
     }
 
     if (x_ctb + ctb_size >= s->sps->width &&
@@ -2790,7 +2798,7 @@ static int hls_decode_entry_wpp(AVCodecContext *avctxt, void *input_ctb_row, int
 
     return ctb_addr_ts;
 }
-
+//!< 解码整个tile,或者Slice?,
 static int hls_decode_entry_tiles(AVCodecContext *avctxt, int *input_ctb_row, int job, int self_id)
 {
     HEVCContext *s = avctxt->priv_data;
@@ -2889,7 +2897,7 @@ static void slices_filters(HEVCContext *s)
 }
 #endif
 
-
+//@< nal : nal单元数据包数据 length: nal单元数据包数据长度
 static int hls_slice_data(HEVCContext *s, const uint8_t *nal, int length)
 {
     HEVCLocalContext *lc = s->HEVClc;
@@ -2936,8 +2944,8 @@ static int hls_slice_data(HEVCContext *s, const uint8_t *nal, int length)
         avpriv_atomic_int_set(&s->wpp_err, 0);
         ff_reset_entries(s->avctx);
     }
-    s->data = nal;
-    for (i = 1; i < s->threads_number; i++) {
+    s->data = nal;   //!< 指向当前Slice数据包数据区
+    for (i = 1; i < s->threads_number; i++) {  //!< 给多SLice线程初始化数据?
         s->sList[i]->HEVClc->first_qp_group = 1;
         s->sList[i]->HEVClc->qp_y = s->sList[0]->HEVClc->qp_y;
         memcpy(s->sList[i], s, sizeof(HEVCContext));
@@ -2948,10 +2956,10 @@ static int hls_slice_data(HEVCContext *s, const uint8_t *nal, int length)
         arg[i] = i;
         ret[i] = 0;
     }
-
-    if (s->pps->entropy_coding_sync_enabled_flag && s->threads_number!=1)
+    //!< 是否为并行
+    if (s->pps->entropy_coding_sync_enabled_flag && s->threads_number!=1)  //!< WPP并行
         s->avctx->execute2(s->avctx, (void *) hls_decode_entry_wpp  , arg, ret, s->sh.num_entry_point_offsets + 1);
-    else if (s->pps->tiles_enabled_flag        && s->threads_number!=1)
+    else if (s->pps->tiles_enabled_flag        && s->threads_number!=1) //!< 多tiles并行
         s->avctx->execute2(s->avctx, (void *) hls_decode_entry_tiles, arg, ret, s->sh.num_entry_point_offsets + 1);
     else
         s->avctx->execute(s->avctx, hls_decode_entry, arg, ret , 1, sizeof(int));
@@ -3152,7 +3160,7 @@ fail:
     s->ref = NULL;
     return ret;
 }
-
+//!< 解码一个NAL单元
 static int decode_nal_unit(HEVCContext *s, const uint8_t *nal, int length)
 {
     HEVCLocalContext *lc = s->HEVClc;
@@ -3265,7 +3273,7 @@ static int decode_nal_unit(HEVCContext *s, const uint8_t *nal, int length)
                 s->max_ra = INT_MIN;
         }
 
-        if (s->sh.first_slice_in_pic_flag) {
+        if (s->sh.first_slice_in_pic_flag) {   //!< first Slice in picture
             ret = hevc_frame_start(s);
             if (ret < 0)
                 return ret;
@@ -3309,7 +3317,7 @@ static int decode_nal_unit(HEVCContext *s, const uint8_t *nal, int length)
                     av_log(s->avctx, AV_LOG_ERROR, "Error allocating frame, Addditional DPB full, decoder_%d.\n", s->decoder_id);
             }
 #endif
-        ctb_addr_ts = hls_slice_data(s, nal, length);
+        ctb_addr_ts = hls_slice_data(s, nal, length);    //!< 解码SLice Data
 
         if (ctb_addr_ts >= (s->sps->ctb_width * s->sps->ctb_height)) {
             s->is_decoded = 1;
@@ -3718,7 +3726,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         s->NALListOrder[i]  = 0;
 #endif
     /* split the input packet into NAL units, so we know the upper bound on the
-     * number of slices in the frame */
+     * number of slices in the frame ,将劈分成以NAL单元*/
     s->nb_nals = 0;
     while (length >= 4) {
         HEVCNAL *nal;
@@ -3737,7 +3745,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
                 goto fail;
             }
         } else {
-            /* search start code */
+            /* search start code  : 0x000001*/
             if (buf[2] == 0) {
                 length--;
                 buf++;
@@ -3748,7 +3756,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
             }
-
+            //!< 跳过起始码
             buf           += 3;
             length        -= 3;
         }
@@ -3776,11 +3784,11 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         s->skipped_bytes_pos_size = s->skipped_bytes_pos_size_nal[s->nb_nals];
         s->skipped_bytes_pos = s->skipped_bytes_pos_nal[s->nb_nals];
         nal = &s->nals[s->nb_nals];
-        consumed = ff_hevc_extract_rbsp(s, buf, extract_length, nal);
+        consumed = ff_hevc_extract_rbsp(s, buf, extract_length, nal);    //!< 查找数据包,并给当前NAL结构体赋值
 
         s->skipped_bytes_nal[s->nb_nals] = s->skipped_bytes;
         s->skipped_bytes_pos_size_nal[s->nb_nals] = s->skipped_bytes_pos_size;
-        s->skipped_bytes_pos_nal[s->nb_nals++] = s->skipped_bytes_pos;
+        s->skipped_bytes_pos_nal[s->nb_nals++] = s->skipped_bytes_pos;    //!< 注意在此nb_nals 加一,表示数据包数量加一
 
 
         if (consumed < 0) {
@@ -3877,7 +3885,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         int ret;
         s->skipped_bytes = s->skipped_bytes_nal[i];
         s->skipped_bytes_pos = s->skipped_bytes_pos_nal[i];
-
+         //!< 解码Nal
         ret = decode_nal_unit(s, s->nals[i].data, s->nals[i].size);
         if (ret < 0) {
             av_log(s->avctx, AV_LOG_WARNING,
@@ -3982,7 +3990,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
     int ret;
     HEVCContext *s = avctx->priv_data;
 
-    if (!avpkt->size) {
+    if (!avpkt->size) {  //!<  没有输入码流的时候,输出解码器中缓存的数据帧
         ret = ff_hevc_output_frame(s, data, 1);
         if (ret < 0)
             return ret;
@@ -4006,7 +4014,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
 		s->last_frame_pts = avpkt->pts;
 	}
 	
-	ret    = decode_nal_units(s, avpkt->data, avpkt->size);
+	ret    = decode_nal_units(s, avpkt->data, avpkt->size);   //!< 解码一Nal码流,为一帧数据
     if (ret < 0)
         return ret;
 
@@ -4043,7 +4051,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
         s->is_decoded = 0;
     }
 
-    if (s->output_frame->buf[0]) {
+    if (s->output_frame->buf[0]) {  //!< 输出解码后的数据
         av_frame_move_ref(data, s->output_frame);
         *got_output = 1;
     }

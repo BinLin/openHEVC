@@ -115,7 +115,7 @@ typedef struct Info {
 static void video_decode_example(const char *filename)
 {
     AVFormatContext *pFormatCtx=NULL;
-    AVPacket        packet;
+    AVPacket        packet;   //!< AVPacket 保存解码前数据
 #if FRAME_CONCEALMENT
     FILE *fin_loss = NULL, *fin1 = NULL;
     Info info;
@@ -124,9 +124,9 @@ static void video_decode_example(const char *filename)
     int is_received = 1;
 #endif
     FILE *fout  = NULL;
-    int width   = -1;
+    int width   = -1;   //!< 图像的宽度高度
     int height  = -1;
-    int nbFrame = 0;
+    int nbFrame = 0;    //!< 解码输出的帧数
     int stop    = 0;
     int stop_dec= 0;
     int got_picture;
@@ -134,7 +134,7 @@ static void video_decode_example(const char *filename)
 #ifdef TIME2
     long unsigned int time_us = 0;
 #endif
-    int video_stream_idx;
+    int video_stream_idx;   //!< 视频流的ID
     char output_file2[256];
 
     OpenHevc_Frame     openHevcFrame;
@@ -146,21 +146,21 @@ static void video_decode_example(const char *filename)
         exit(1);
     }
 
-    openHevcHandle = libOpenHevcInit(nb_pthreads, thread_type/*, pFormatCtx*/);
+    openHevcHandle = libOpenHevcInit(nb_pthreads, thread_type/*, pFormatCtx*/);  //!< 分配内存并初始化解码器,解析器,以及结构体openHevcHandle
     libOpenHevcSetCheckMD5(openHevcHandle, check_md5_flags);
 
     if (!openHevcHandle) {
         fprintf(stderr, "could not open OpenHevc\n");
         exit(1);
     }
-    av_register_all();
-    pFormatCtx = avformat_alloc_context();
+    av_register_all();   //!< 注册相关的容器格式和CODEC
+    pFormatCtx = avformat_alloc_context();  //!< 初始化结构体AVFormatContext
 
-    if(avformat_open_input(&pFormatCtx, filename, NULL, NULL)!=0) {
+    if(avformat_open_input(&pFormatCtx, filename, NULL, NULL)!=0) {  //!< Open input
         printf("%s",filename);
         exit(1); // Couldn't open file
-    }
-    if ( (video_stream_idx = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0)) < 0) {
+    }   //!< 返回视频流的id
+    if ( (video_stream_idx = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0)) < 0) {  //!< Find video stream from input file
         fprintf(stderr, "Could not find video stream in input file\n");
         exit(1);
     }
@@ -175,7 +175,7 @@ static void video_decode_example(const char *filename)
     }
 
     libOpenHevcSetDebugMode(openHevcHandle, 0);
-    libOpenHevcStartDecoder(openHevcHandle);
+    libOpenHevcStartDecoder(openHevcHandle);   //!< 打开,初始化编解码器
     openHevcFrameCpy.pvY = NULL;
     openHevcFrameCpy.pvU = NULL;
     openHevcFrameCpy.pvV = NULL;
@@ -202,7 +202,7 @@ static void video_decode_example(const char *filename)
 #endif
 
     while(!stop) {
-        if (stop_dec == 0 && av_read_frame(pFormatCtx, &packet)<0) stop_dec = 1;
+        if (stop_dec == 0 && av_read_frame(pFormatCtx, &packet)<0) stop_dec = 1; //!< 读取音频若干帧或者视频的一帧(Nal),保存到packet,包含对数据包的解析过程
 #if FRAME_CONCEALMENT
         // Get the corresponding frame in the trace
         if(is_received)
@@ -220,11 +220,11 @@ static void video_decode_example(const char *filename)
             else
                 got_picture = libOpenHevcDecode(openHevcHandle, NULL,  0, packet.pts);
 #else
-            got_picture = libOpenHevcDecode(openHevcHandle, packet.data, !stop_dec ? packet.size : 0, packet.pts);
+            got_picture = libOpenHevcDecode(openHevcHandle, packet.data, !stop_dec ? packet.size : 0, packet.pts);  //!< HEVC解码器,完成一帧数据的解码过程
 #endif
             if (got_picture > 0) {
                 fflush(stdout);
-                libOpenHevcGetPictureInfo(openHevcHandle, &openHevcFrame.frameInfo);
+                libOpenHevcGetPictureInfo(openHevcHandle, &openHevcFrame.frameInfo);   //!< 给frameInfo的参数赋值
                 if ((width != openHevcFrame.frameInfo.nWidth) || (height != openHevcFrame.frameInfo.nHeight)) {
                     width  = openHevcFrame.frameInfo.nWidth;
                     height = openHevcFrame.frameInfo.nHeight;
@@ -260,7 +260,7 @@ static void video_decode_example(const char *filename)
                     libOpenHevcGetOutput(openHevcHandle, 1, &openHevcFrame);
                     libOpenHevcGetPictureInfo(openHevcHandle, &openHevcFrame.frameInfo);
                     SDL_Display((openHevcFrame.frameInfo.nYPitch - openHevcFrame.frameInfo.nWidth)/2, openHevcFrame.frameInfo.nWidth, openHevcFrame.frameInfo.nHeight,
-                            openHevcFrame.pvY, openHevcFrame.pvU, openHevcFrame.pvV);
+                            openHevcFrame.pvY, openHevcFrame.pvU, openHevcFrame.pvV);  //!< 在SDL中display图像
                 }
 #endif
                 if (fout) {
@@ -295,8 +295,8 @@ static void video_decode_example(const char *filename)
             free(openHevcFrameCpy.pvV);
         }
     }
-    avformat_close_input(&pFormatCtx);
-    libOpenHevcClose(openHevcHandle);
+    avformat_close_input(&pFormatCtx);    //!< 关闭输入文件
+    libOpenHevcClose(openHevcHandle);     //!< 释放解码器
 #if USE_SDL
 #ifdef TIME2
     printf("frame= %d fps= %.0f time= %ld video_size= %dx%d\n", nbFrame, nbFrame/time, time_us, openHevcFrame.frameInfo.nWidth, openHevcFrame.frameInfo.nHeight);

@@ -136,11 +136,11 @@ void init_main(int argc, char *argv[]) {
 
     int c;
     check_md5_flags   = ENABLE;
-    thread_type       = 1;
+    thread_type       = 1;      //!< 多线程类型
     input_file        = NULL;
     display_flags     = ENABLE;
     output_file       = NULL;
-    nb_pthreads       = 1;
+    nb_pthreads       = 1;      //!< 线程个数,线程池的线程个数
     temporal_layer_id = 7;
     no_cropping       = DISABLE;
     quality_layer_id  = 0; // Base layer

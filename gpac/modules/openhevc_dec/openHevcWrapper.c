@@ -25,10 +25,10 @@
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 
-#define MAX_DECODERS 2
+#define MAX_DECODERS 1
 #define ACTIVE_NAL
 typedef struct OpenHevcWrapperContext {
-    AVCodec *codec;
+    AVCodec *codec;   //!< 存储编解码器
     AVCodecContext *c;
     AVFrame *picture;
     AVPacket avpkt;
@@ -50,21 +50,21 @@ OpenHevc_Handle libOpenHevcInit(int nb_pthreads, int thread_type)
     int i;
     OpenHevcWrapperContexts *openHevcContexts = av_mallocz(sizeof(OpenHevcWrapperContexts));
     OpenHevcWrapperContext  *openHevcContext;
-    avcodec_register_all();
+    avcodec_register_all();   //!< 注册编解码器
     openHevcContexts->nb_decoders   = MAX_DECODERS;
     openHevcContexts->active_layer  = MAX_DECODERS-1;
     openHevcContexts->display_layer = MAX_DECODERS-1;
     openHevcContexts->wraper = av_malloc(sizeof(OpenHevcWrapperContext*)*openHevcContexts->nb_decoders);
     for(i=0; i < openHevcContexts->nb_decoders; i++){
         openHevcContext = openHevcContexts->wraper[i] = av_malloc(sizeof(OpenHevcWrapperContext));
-        av_init_packet(&openHevcContext->avpkt);
-        openHevcContext->codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+        av_init_packet(&openHevcContext->avpkt);  //!< 初始化AVPacket
+        openHevcContext->codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);  //!< 在注册完解码器之后,查找相关ID的decoder
         if (!openHevcContext->codec) {
             fprintf(stderr, "codec not found\n");
             return NULL;
         }
 
-        openHevcContext->parser  = av_parser_init( openHevcContext->codec->id );
+        openHevcContext->parser  = av_parser_init( openHevcContext->codec->id );    //!< 分配内存并初始化解析器
         openHevcContext->c       = avcodec_alloc_context3(openHevcContext->codec);
         openHevcContext->picture = avcodec_alloc_frame();
         openHevcContext->c->flags |= CODEC_FLAG_UNALIGNED;
@@ -81,7 +81,7 @@ OpenHevc_Handle libOpenHevcInit(int nb_pthreads, int thread_type)
             av_opt_set(openHevcContext->c, "thread_type", "frame", 0);
         else if (thread_type == 2)
             av_opt_set(openHevcContext->c, "thread_type", "slice", 0);
-        else
+        else   //!< 4
             av_opt_set(openHevcContext->c, "thread_type", "frameslice", 0);
 
         av_opt_set_int(openHevcContext->c, "threads", nb_pthreads, 0);
@@ -108,13 +108,20 @@ int libOpenHevcStartDecoder(OpenHevc_Handle openHevcHandle)
     }
     return 1;
 }
-
+/*
+ * function: libOpenHevcDecode()
+ *
+ * openHevcHandle : 解码器句柄
+ * buff:			压缩数据
+ * au_len:			数据大大小
+ * pts:				数据帧的presentation Time
+ */
 int libOpenHevcDecode(OpenHevc_Handle openHevcHandle, const unsigned char *buff, int au_len, int64_t pts)
 {
     int got_picture[MAX_DECODERS], len=0, i, max_layer;
     OpenHevcWrapperContexts *openHevcContexts = (OpenHevcWrapperContexts *) openHevcHandle;
     OpenHevcWrapperContext  *openHevcContext;
-    for(i =0; i < MAX_DECODERS; i++)  {
+    for(i =0; i < MAX_DECODERS; i++)  { //MAX_DECODERS
         got_picture[i]                 = 0;
         openHevcContext                = openHevcContexts->wraper[i];
         openHevcContext->c->quality_id = openHevcContexts->active_layer;
@@ -127,7 +134,7 @@ int libOpenHevcDecode(OpenHevc_Handle openHevcHandle, const unsigned char *buff,
             openHevcContext->avpkt.data = NULL;
         }
         openHevcContext->avpkt.pts  = pts;
-        len                         = avcodec_decode_video2( openHevcContext->c, openHevcContext->picture,
+        len                         = avcodec_decode_video2( openHevcContext->c, openHevcContext->picture,   //!< 解码一帧视频数据
                                                              &got_picture[i], &openHevcContext->avpkt);
         if(i+1 < openHevcContexts->nb_decoders)
             openHevcContexts->wraper[i+1]->c->BL_frame = openHevcContexts->wraper[i]->c->BL_frame;

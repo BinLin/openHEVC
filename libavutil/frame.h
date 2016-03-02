@@ -153,6 +153,10 @@ typedef struct AVFrameSideData {
  * Similarly fields that are marked as to be only accessed by
  * av_opt_ptr() can be reordered. This allows 2 forks to add fields
  * without breaking compatibility with each other.
+ *
+ * AVFrame结构体一般用于存储原始数据（即非压缩数据，例如对视频来说是YUV，RGB，对音频来说是PCM），
+ * 此外还包含了一些相关的信息。比如说，解码的时候存储了宏块类型表，QP表，运动矢量表等数据。
+ * 编码的时候也存储了相关的数据。因此在使用FFMPEG进行码流分析的时候，AVFrame是一个很重要的结构体。
  */
 typedef struct AVFrame {
 #define AV_NUM_DATA_POINTERS 8
@@ -165,7 +169,7 @@ typedef struct AVFrame {
      * up to 16 bytes beyond the planes, if these filters are to be used,
      * then 16 extra bytes must be allocated.
      */
-    uint8_t *data[AV_NUM_DATA_POINTERS];
+    uint8_t *data[AV_NUM_DATA_POINTERS];  //!< 解码后的原始数据,YUV
 
     /**
      * For video, size in bytes of each picture line.
@@ -182,7 +186,7 @@ typedef struct AVFrame {
      * @note The linesize may be larger than the size of usable data -- there
      * may be extra padding present for performance reasons.
      */
-    int linesize[AV_NUM_DATA_POINTERS];
+    int linesize[AV_NUM_DATA_POINTERS]; //!< data 中一行数据的大小,注明:未必等于图像的宽,一般大于图像的宽(扩边)
 
     /**
      * pointers to the data planes/channels.
@@ -203,12 +207,12 @@ typedef struct AVFrame {
     /**
      * width and height of the video frame
      */
-    int width, height;
+    int width, height; //!< 图像的原始宽高
 
     /**
      * width and height of the video frame
      */
-    int coded_width, coded_height;
+    int coded_width, coded_height;  //!< 图像的解码实际宽高(包括扩边)?
 
     /**
      * number of audio samples (per channel) described by this frame
@@ -220,7 +224,7 @@ typedef struct AVFrame {
      * Values correspond to enum AVPixelFormat for video frames,
      * enum AVSampleFormat for audio)
      */
-    int format;
+    int format;  //!< 解码的数据类型  YUV420
 
     /**
      * 1 -> keyframe, 0-> not
@@ -228,7 +232,7 @@ typedef struct AVFrame {
     int key_frame;
 
     /**
-     * Picture type of the frame.
+     * Picture type of the frame. I,P,B帧
      */
     enum AVPictureType pict_type;
 
@@ -240,7 +244,7 @@ typedef struct AVFrame {
     /**
      * Sample aspect ratio for the video frame, 0/1 if unknown/unspecified.
      */
-    AVRational sample_aspect_ratio;
+    AVRational sample_aspect_ratio; //!< 宽高比
 
     /**
      * Presentation timestamp in time_base units (time when frame should be shown to user).
@@ -261,10 +265,12 @@ typedef struct AVFrame {
 
     /**
      * picture number in bitstream order
+     * 编码帧序号
      */
     int coded_picture_number;
     /**
      * picture number in display order
+     * 显示帧序号
      */
     int display_picture_number;
 
@@ -293,7 +299,7 @@ typedef struct AVFrame {
 
     /**
      * mbskip_table[mb]>=1 if MB didn't change
-     * stride= mb_width = (width+15)>>4
+     * stride= mb_width = (width+15)>>4,向上舍入
      */
     attribute_deprecated
     uint8_t *mbskip_table;
@@ -308,7 +314,7 @@ typedef struct AVFrame {
      * motion_val[direction][x + y*mv_stride][0->mv_x, 1->mv_y];
      * @endcode
      */
-    int16_t (*motion_val[2])[2];
+    int16_t (*motion_val[2])[2]; //!< 运动矢量表
 
     /**
      * macroblock type table
@@ -328,7 +334,7 @@ typedef struct AVFrame {
      * the order in which these are stored can depend on the codec.
      */
     attribute_deprecated
-    int8_t *ref_index[2];
+    int8_t *ref_index[2];  //!< L0 与 L1参考帧列表
 #endif
 
     /**
@@ -353,7 +359,7 @@ typedef struct AVFrame {
     int repeat_pict;
 
     /**
-     * The content of the picture is interlaced.
+     * The content of the picture is interlaced.是否隔行扫描
      */
     int interlaced_frame;
 

@@ -190,19 +190,20 @@ int av_codec_is_encoder(const AVCodec *codec)
 
 int av_codec_is_decoder(const AVCodec *codec)
 {
-    return codec && codec->decode;
+    return codec && codec->decode;  //!< decode() 为相应解码器函数接口
 }
 
+//!< 遍历AVCodec链表,将当前AVCodec添加到链表末尾
 av_cold void avcodec_register(AVCodec *codec)
 {
-    AVCodec **p;
+    AVCodec **p;    //!< 存储解码器信息
     avcodec_init();
     p = last_avcodec;
     codec->next = NULL;
 
     while(*p || avpriv_atomic_ptr_cas((void * volatile *)p, NULL, codec))
         p = &(*p)->next;
-    last_avcodec = &codec->next;
+    last_avcodec = &codec->next;    //!< 将codec添加到链表末尾
 
     if (codec->init_static_data)
         codec->init_static_data(codec);
@@ -1336,6 +1337,9 @@ int attribute_align_arg ff_codec_open2_recursive(AVCodecContext *avctx, const AV
     return ret;
 }
 
+/*
+ * 打开并初始化编解码器
+ */
 int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
 {
     int ret = 0;
@@ -1498,7 +1502,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
 
     if (HAVE_THREADS
         && !(avctx->internal->frame_thread_encoder && (avctx->active_thread_type&FF_THREAD_FRAME))) {
-        ret = ff_thread_init(avctx);
+        ret = ff_thread_init(avctx);  //!< 线程初始化
         if (ret < 0) {
             goto free_and_end;
         }
@@ -2344,16 +2348,16 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
 
     if (!avctx->codec)
         return AVERROR(EINVAL);
-    if (avctx->codec->type != AVMEDIA_TYPE_VIDEO) {
+    if (avctx->codec->type != AVMEDIA_TYPE_VIDEO) {   //!< 检查是否为视频
         av_log(avctx, AV_LOG_ERROR, "Invalid media type for video\n");
         return AVERROR(EINVAL);
     }
 
     *got_picture_ptr = 0;
-    if ((avctx->coded_width || avctx->coded_height) && av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx))
+    if ((avctx->coded_width || avctx->coded_height) && av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx))  //!< 检查宽高是否正确
         return AVERROR(EINVAL);
 
-    av_frame_unref(picture);
+    av_frame_unref(picture);  //!< The caller must release the frame using av_frame_unref(), when the frame is no longer needed.
 
     if ((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size || (avctx->active_thread_type & FF_THREAD_FRAME)) {
         int did_split = av_packet_split_side_data(&tmp);
@@ -2365,10 +2369,10 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
         }
 
         avctx->internal->pkt = &tmp;
-        if (HAVE_THREADS && avctx->active_thread_type & FF_THREAD_FRAME)
+        if (HAVE_THREADS && avctx->active_thread_type & FF_THREAD_FRAME)    //!< 多线程解码,帧级并行解码
             ret = ff_thread_decode_frame(avctx, picture, got_picture_ptr,
                                          &tmp);
-        else {
+        else {   //!< 单线程串行解码
             ret = avctx->codec->decode(avctx, picture, got_picture_ptr,
                                        &tmp);
             picture->pkt_dts = avpkt->dts;
@@ -2894,6 +2898,7 @@ static enum AVCodecID remap_deprecated_codec_id(enum AVCodecID id)
     }
 }
 
+//!< 遍历注册链表,查找相同id的已经注册的编解码器
 static AVCodec *find_encdec(enum AVCodecID id, int encoder)
 {
     AVCodec *p, *experimental = NULL;

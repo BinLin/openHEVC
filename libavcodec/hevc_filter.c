@@ -1026,8 +1026,8 @@ void ff_hevc_deblocking_boundary_strengths_v(HEVCContext *s, int x0, int y0, int
 
 void ff_hevc_hls_filter(HEVCContext *s, int x, int y, int ctb_size)
 {
-    deblocking_filter_CTB(s, x, y);
-    if (s->sps->sao_enabled) {
+    deblocking_filter_CTB(s, x, y);  //!< 去方块滤波
+    if (s->sps->sao_enabled) {   //!< SAO滤波
         int x_end = x >= s->sps->width  - ctb_size;
         int y_end = y >= s->sps->height - ctb_size;
         if (y && x)
@@ -1053,7 +1053,7 @@ void ff_hevc_hls_filter(HEVCContext *s, int x, int y, int ctb_size)
 
 void ff_hevc_hls_filters(HEVCContext *s, int x_ctb, int y_ctb, int ctb_size)
 {
-    int x_end = x_ctb >= s->sps->width  - ctb_size;
+    int x_end = x_ctb >= s->sps->width  - ctb_size;  //!< 是否在图像边界
     int y_end = y_ctb >= s->sps->height - ctb_size;
     if (y_ctb && x_ctb)
         ff_hevc_hls_filter(s, x_ctb - ctb_size, y_ctb - ctb_size, ctb_size);

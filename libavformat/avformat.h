@@ -1196,6 +1196,12 @@ typedef struct AVFormatInternal AVFormatInternal;
  * version bump.
  * sizeof(AVFormatContext) must not be used outside libav*, use
  * avformat_alloc_context() to create an AVFormatContext.
+ *
+ * 该结构体表示匹配当前运行的文件容器格式使用的上下文
+ * 在FFmpeg的文件转换或者打开过程中，首先要做的就是根据传入文件和传出文件的后缀名\
+ * 匹配合适的demuxer和muxer，得到合适的信息后保存在AVFormatContext中。
+ * muxer: 多路信号合成器,将音频视频字幕等打包成一个文件
+ * dexumer:多路信号分离器,muxer的逆过程
  */
 typedef struct AVFormatContext {
     /**
@@ -1209,12 +1215,13 @@ typedef struct AVFormatContext {
      *
      * Demuxing only, set by avformat_open_input().
      */
-    struct AVInputFormat *iformat;
+    struct AVInputFormat *iformat;   //!< 输入数据的封装格式(flv, mp4, rmvb, avi)
 
     /**
      * The output container format.
      *
      * Muxing only, must be set by the caller before avformat_write_header().
+     * 指向具体的muxer
      */
     struct AVOutputFormat *oformat;
 
@@ -1224,6 +1231,7 @@ typedef struct AVFormatContext {
      *
      * - muxing: set by avformat_write_header()
      * - demuxing: set by avformat_open_input()
+     * 具体文件容器格式的Context,如:avicontext
      */
     void *priv_data;
 
@@ -1253,7 +1261,7 @@ typedef struct AVFormatContext {
      *
      * Set by avformat_new_stream(), must not be modified by any other code.
      */
-    unsigned int nb_streams;
+    unsigned int nb_streams;   //!< 视,音频的个数
     /**
      * A list of all streams in the file. New streams are created with
      * avformat_new_stream().
@@ -1265,7 +1273,7 @@ typedef struct AVFormatContext {
      *
      * Freed by libavformat in avformat_free_context().
      */
-    AVStream **streams;
+    AVStream **streams;   //!< 视频,音频流
 
     /**
      * input or output filename
@@ -1273,7 +1281,7 @@ typedef struct AVFormatContext {
      * - demuxing: set by avformat_open_input()
      * - muxing: may be set by the caller before avformat_write_header()
      */
-    char filename[1024];
+    char filename[1024];  //!< 文件名
 
     /**
      * Position of the first frame of the component, in
@@ -1292,19 +1300,19 @@ typedef struct AVFormatContext {
      *
      * Demuxing only, set by libavformat.
      */
-    int64_t duration;
+    int64_t duration;   //!< 时长
 
     /**
      * Total stream bitrate in bit/s, 0 if not
      * available. Never set it directly if the file_size and the
      * duration are known as FFmpeg can compute it automatically.
      */
-    int bit_rate;
+    int bit_rate;   //!< 比特率 (单位bps)
 
     unsigned int packet_size;
     int max_delay;
 
-    /**
+    /**\
      * Flags modifying the (de)muxer behaviour. A combination of AVFMT_FLAG_*.
      * Set by the user before avformat_open_input() / avformat_write_header().
      */

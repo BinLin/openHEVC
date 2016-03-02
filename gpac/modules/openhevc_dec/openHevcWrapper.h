@@ -33,8 +33,8 @@ extern "C" {
 typedef void* OpenHevc_Handle;
 
 typedef struct OpenHevc_Rational{
-    int num; ///< numerator
-    int den; ///< denominator
+    int num; ///< numerator,分子
+    int den; ///< denominator,分母
 } OpenHevc_Rational;
 
 
@@ -61,7 +61,7 @@ typedef struct OpenHevc_FrameInfo
 } OpenHevc_FrameInfo;
 
 typedef struct OpenHevc_Frame
-{
+{    //!< 存储openHEVC图像帧的YUV数据
    void**      pvY;
    void**      pvU;
    void**      pvV;

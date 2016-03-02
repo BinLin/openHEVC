@@ -738,7 +738,7 @@ typedef struct HEVCSPS {
     ///< coded frame dimension in various units
     int width;
     int height;
-    int ctb_width;
+    int ctb_width;  //!< 当前Frame以CTU为单位
     int ctb_height;
     int ctb_size;
     int min_cb_width;
@@ -872,7 +872,7 @@ typedef struct SliceHeader {
 
     unsigned int nb_refs[2];
 
-    uint8_t slice_sample_adaptive_offset_flag[3];
+    uint8_t slice_sample_adaptive_offset_flag[3];   //!< YUV
     uint8_t mvd_l1_zero_flag;
 
     uint8_t cabac_init_flag;
@@ -1054,8 +1054,8 @@ typedef struct HEVCNAL {
     uint8_t *rbsp_buffer;
     int rbsp_buffer_size;
 
-    int size;
-    const uint8_t *data;
+    int size;  //!< nal 的长度
+    const uint8_t *data;   //!< nal 的数据段
 } HEVCNAL;
 
 typedef struct HEVCLocalContext {
@@ -1079,7 +1079,7 @@ typedef struct HEVCLocalContext {
 
     int qPy_pred;
 
-    uint8_t ctb_left_flag;
+    uint8_t ctb_left_flag;  //!< 为1,说明left_ctb 存在
     uint8_t ctb_up_flag;
     uint8_t ctb_up_right_flag;
     uint8_t ctb_up_left_flag;
@@ -1121,8 +1121,8 @@ typedef struct HEVCContext {
     AVBufferPool *tab_mvf_pool;
     AVBufferPool *rpl_tab_pool;
 
-    SAOParams *sao;
-    DBParams *deblock;
+    SAOParams *sao;   //!< 样点自适应补偿
+    DBParams *deblock;  //!< 去方块滤波
 
     ///< candidate references for the current frame
     RefPicList rps[5+2]; // 2 for inter layer reference pictures
@@ -1153,7 +1153,7 @@ typedef struct HEVCContext {
     uint8_t *horizontal_bs;
     uint8_t *vertical_bs;
 
-    int32_t *tab_slice_address;
+    int32_t *tab_slice_address;  //!< 每个光栅扫描CTU所在的Slice的初始CTu在frame中的位置
 
     //  CU
     uint8_t *skip_flag;
@@ -1164,7 +1164,7 @@ typedef struct HEVCContext {
     uint8_t *cbf_luma; // cbf_luma of colocated TU
     uint8_t *is_pcm;
 
-    // CTB-level flags affecting loop filter operation
+    // CTB-level flags affecting loop filter operation,是否可越SLice边界
     uint8_t *filter_slice_edges;
 
     /** used on BE to byteswap the lines for checksumming */
@@ -1187,10 +1187,10 @@ typedef struct HEVCContext {
     int **skipped_bytes_pos_nal;
     int *skipped_bytes_pos_size_nal;
 
-    const uint8_t *data;
+    const uint8_t *data;   //!< 指向一个NAL数据包链表中的一个NAL数据包
 
-    HEVCNAL *nals;
-    int nb_nals;
+    HEVCNAL *nals; //!< 指向NAL数据包链表
+    int nb_nals;  //!< 当前frame,NAL数据包的个数
     int nals_allocated;
     // type of the first VCL NAL of the current frame
     enum NALUnitType first_nal_type;

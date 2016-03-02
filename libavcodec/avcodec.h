@@ -1124,7 +1124,7 @@ typedef struct AVPacketSideData {
  * The side data is always allocated with av_malloc() and is freed in
  * av_free_packet().
  */
-typedef struct AVPacket {
+typedef struct AVPacket {   //!< 存储编码后的压缩数据
     /**
      * A reference to the reference-counted buffer where the packet data is
      * stored.
@@ -1136,20 +1136,20 @@ typedef struct AVPacket {
      * the decompressed packet will be presented to the user.
      * Can be AV_NOPTS_VALUE if it is not stored in the file.
      * pts MUST be larger or equal to dts as presentation cannot happen before
-     * decompression, unless one wants to view hex dumps. Some formats misuse
+     * decompression,(先decode才能presentation) unless one wants to view hex dumps. Some formats misuse
      * the terms dts and pts/cts to mean something different. Such timestamps
      * must be converted to true pts/dts before they are stored in AVPacket.
      */
-    int64_t pts;
+    int64_t pts;    //!< 显示时间戳
     /**
      * Decompression timestamp in AVStream->time_base units; the time at which
      * the packet is decompressed.
      * Can be AV_NOPTS_VALUE if it is not stored in the file.
      */
-    int64_t dts;
-    uint8_t *data;
-    int   size;
-    int   stream_index;
+    int64_t dts;     //!< 解码时间戳
+    uint8_t *data;   //!< 压缩编码的数据, 一个data通常对应一帧数据
+    int   size;      //!< data的大小
+    int   stream_index;    //!< 标识该AVPacket所属的视频/音频流
     /**
      * A combination of AV_PKT_FLAG values
      */
@@ -1168,7 +1168,7 @@ typedef struct AVPacket {
     int   duration;
 #if FF_API_DESTRUCT_PACKET
     attribute_deprecated
-    void  (*destruct)(struct AVPacket *);
+    void  (*destruct)(struct AVPacket *);  //!< 函数指针,销毁AVpacket
     attribute_deprecated
     void  *priv;
 #endif
@@ -1283,7 +1283,7 @@ typedef struct AVCodecContext {
      * - encoding: Set by user.
      * - decoding: Set by user.
      */
-    void *opaque;
+    void *opaque;  //!< 不透明
 
     /**
      * the average bitrate
@@ -2738,7 +2738,7 @@ typedef struct AVCodecContext {
      * - encoding: Set by user.
      * - decoding: Set by user.
      */
-    int thread_count;
+    int thread_count;  //!< 线程数目
 
     /**
      * Which multithreading methods to use.
@@ -2748,7 +2748,7 @@ typedef struct AVCodecContext {
      * - encoding: Set by user, otherwise the default is used.
      * - decoding: Set by user, otherwise the default is used.
      */
-    int thread_type;
+    int thread_type; //!< 多线程类型
 #define FF_THREAD_FRAME         1 ///< Decode more than one frame at once
 #define FF_THREAD_SLICE         2 ///< Decode more than one part of a single frame at once
 #define FF_THREAD_FRAME_SLICE   4 ///< Decode more than one part of a single frame at once at more than one frame at once
@@ -2758,11 +2758,11 @@ typedef struct AVCodecContext {
      * - encoding: Set by libavcodec.
      * - decoding: Set by libavcodec.
      */
-    int active_thread_type;
+    int active_thread_type;   //!< 实际采用的多线程类型,如上所示
 
     /**
      * Set by the client if its custom get_buffer() callback can be called
-     * synchronously from another thread, which allows faster multithreaded decoding.
+     * synchronously (同步)from another thread, which allows faster multithreaded decoding.
      * draw_horiz_band() will be called from other threads regardless of this setting.
      * Ignored if the default get_buffer() is used.
      * - encoding: Set by user.
@@ -3128,14 +3128,14 @@ typedef struct AVCodecContext {
      * - encoding: Set by user.
      * - decoding: Set by user.
      */
-    int thread_count_frame;
+    int thread_count_frame;  //!< 帧级并行的线程数
 
     /**
      *  The decoded picture at layer n for SHVC decoder
      *  this frame is used by the layer (n+1) as refernce frame for inter-layer predictions 
      */
     void *BL_frame;
-    void *BL_avcontext;
+    void *BL_avcontext;  //!< 指向前一个解码器的AVCodecContext
     int quality_id;
 } AVCodecContext;
 
@@ -3176,20 +3176,20 @@ typedef struct AVCodec {
      * encoder and a decoder can share the same name).
      * This is the primary way to find a codec from the user perspective.
      */
-    const char *name;
+    const char *name;  //@< 编解码器的名字(较短)
     /**
      * Descriptive name for the codec, meant to be more human readable than name.
      * You should use the NULL_IF_CONFIG_SMALL() macro to define it.
      */
-    const char *long_name;
-    enum AVMediaType type;
-    enum AVCodecID id;
+    const char *long_name; //!< 编解码器的名字,全称
+    enum AVMediaType type; //!< 编解码器的类型,音视频,还是字幕
+    enum AVCodecID id;    //!< 当前编解码器的ID
     /**
      * Codec capabilities.
      * see CODEC_CAP_*
      */
     int capabilities;
-    const AVRational *supported_framerates; ///< array of supported framerates, or NULL if any, array is terminated by {0,0}
+    const AVRational *supported_framerates; ///< array of supported framerates, or NULL if any, array is terminated by {0,0},帧率
     const enum AVPixelFormat *pix_fmts;     ///< array of supported pixel formats, or NULL if unknown, array is terminated by -1
     const int *supported_samplerates;       ///< array of supported audio samplerates, or NULL if unknown, array is terminated by 0
     const enum AVSampleFormat *sample_fmts; ///< array of supported sample formats, or NULL if unknown, array is terminated by -1

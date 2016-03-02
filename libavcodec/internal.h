@@ -106,7 +106,7 @@ typedef struct AVCodecInternal {
 
     FramePool *pool;
 
-    void *thread_ctx;
+    void *thread_ctx;  //!< 指向线程池结构
 
     /**
      * Current packet as passed into the decoder, to avoid having to pass the

@@ -92,7 +92,7 @@ int avcodec_get_context_defaults3(AVCodecContext *s, const AVCodec *codec)
     int flags=0;
     memset(s, 0, sizeof(AVCodecContext));
 
-    s->av_class = &av_codec_context_class;
+    s->av_class = &av_codec_context_class;  //@< 赋值
 
     s->codec_type = codec ? codec->type : AVMEDIA_TYPE_UNKNOWN;
     if (codec) {

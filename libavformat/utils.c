@@ -395,6 +395,28 @@ int avformat_queue_attached_pictures(AVFormatContext *s)
     return 0;
 }
 
+
+/*
+ * avformat_open_input()
+ *
+ * 输入输出结构体AVIOContext的初始化；
+
+ * 输入数据的协议（例如RTMP，或者file）的识别（通过一套评分机制）:1判断文件名的后缀 2读取文件头的数据进行比对；
+
+ * 使用获得最高分的文件协议对应的URLProtocol，通过函数指针的方式，与FFMPEG连接（非专业用词）；
+
+ * 剩下的就是调用该URLProtocol的函数进行open,read等操作了
+ *
+ *
+ * 参数ps包含一切媒体相关的上下文结构，有它就有了一切，本函数如果打开媒体成功，
+ * 会返回一个AVFormatContext的实例．
+ * 参数filename是媒体文件名或URL．
+ * 参数fmt是要打开的媒体格式的操作结构，因为是读，所以是inputFormat．此处可以
+ * 传入一个调用者定义的inputFormat，对应命令行中的 -f xxx段，如果指定了它，
+ * 在打开文件中就不会探测文件的实际格式了，以它为准了．
+ * 参数options是对某种格式的一些操作，是为了在命令行中可以对不同的格式传入
+ * 特殊的操作参数而建的， 为了了解流程，完全可以无视它．
+ */
 int avformat_open_input(AVFormatContext **ps, const char *filename,
                         AVInputFormat *fmt, AVDictionary **options)
 {
@@ -403,7 +425,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     AVDictionary *tmp = NULL;
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
 
-    if (!s && !(s = avformat_alloc_context()))
+    if (!s && !(s = avformat_alloc_context()))  //!< 若创建上下文结构分配失败,则再次创建
         return AVERROR(ENOMEM);
     if (!s->av_class) {
         av_log(NULL, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
@@ -417,7 +439,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
 
     if ((ret = av_opt_set_dict(s, &tmp)) < 0)
         goto fail;
-
+    //打开输入媒体（如果需要的话），初始化所有与媒体读写有关的结构们，比如
+    //AVIOContext，AVInputFormat等等
     if ((ret = init_input(s, filename, &tmp)) < 0)
         goto fail;
     s->probe_score = ret;
@@ -439,9 +462,9 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     }
 
     s->duration = s->start_time = AV_NOPTS_VALUE;
-    av_strlcpy(s->filename, filename ? filename : "", sizeof(s->filename));
+    av_strlcpy(s->filename, filename ? filename : "", sizeof(s->filename));  //!< 保存文件名
 
-    /* Allocate private data. */
+    /* Allocate private data. 为当前格式分配私有数据*/
     if (s->iformat->priv_data_size > 0) {
         if (!(s->priv_data = av_mallocz(s->iformat->priv_data_size))) {
             ret = AVERROR(ENOMEM);
@@ -459,7 +482,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (s->pb)
         ff_id3v2_read(s, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta, 0);
 
-    if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->iformat->read_header)
+    if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->iformat->read_header)  //!< 读取流媒体的头部信息,做该格式的初始化
         if ((ret = s->iformat->read_header(s)) < 0)
             goto fail;
 
@@ -475,7 +498,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
 
     if ((ret = avformat_queue_attached_pictures(s)) < 0)
         goto fail;
-
+    //!< 数据取的开始位置,保存偏移量
     if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->pb && !s->data_offset)
         s->data_offset = avio_tell(s->pb);
 
@@ -657,7 +680,7 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
         pkt->data = NULL;
         pkt->size = 0;
         av_init_packet(pkt);
-        ret = s->iformat->read_packet(s, pkt);
+        ret = s->iformat->read_packet(s, pkt);   //!< 关键: 读取一个数据包
         if (ret < 0) {
             if (!pktl || ret == AVERROR(EAGAIN))
                 return ret;
@@ -1285,7 +1308,16 @@ static int64_t ts_to_samples(AVStream *st, int64_t ts)
 {
     return av_rescale(ts, st->time_base.num * st->codec->sample_rate, st->time_base.den);
 }
-
+/*
+ * Function: read_frame_internal()
+ *
+ * read_frame_internal 在ffmpeg中实现了将format格式的packet,最终转换成一帧帧的es流packet，
+ * 并解析填充了packet的pts,dts，等信息，为最终解码提供了重要的数据,read_frame_internal,
+ * 调用ff_read_packet,每次只读取一个包，然后直到parser完这个包的所有数据，才开始读取下一个包，
+ * parser完的数据被保存在parser结构的数据缓冲中，这样即使read_packet读取的下一包和前一包的流不一样，
+ * 由于parser也不一样，所以实现了read_frame_internal这个函数调用，可以解析出不同流的es流,
+ * 而read_frame_internal函数除非出错否则必须解析出一帧数据才能返回
+ */
 static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 {
     int ret = 0, i, got_packet = 0;
@@ -1317,7 +1349,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 
         if (cur_pkt.pts != AV_NOPTS_VALUE &&
             cur_pkt.dts != AV_NOPTS_VALUE &&
-            cur_pkt.pts < cur_pkt.dts) {
+            cur_pkt.pts < cur_pkt.dts) {    //!< pts 与 dts 不匹配,出错返回
             av_log(s, AV_LOG_WARNING,
                    "Invalid timestamps stream=%d, pts=%s, dts=%s, size=%d\n",
                    cur_pkt.stream_index,
@@ -1333,7 +1365,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                    av_ts2str(cur_pkt.dts),
                    cur_pkt.size, cur_pkt.duration, cur_pkt.flags);
 
-        if (st->need_parsing && !st->parser && !(s->flags & AVFMT_FLAG_NOPARSE)) {
+        if (st->need_parsing && !st->parser && !(s->flags & AVFMT_FLAG_NOPARSE)) {  //!< 需要解析,初始化
             st->parser = av_parser_init(st->codec->codec_id);
             if (!st->parser) {
                 av_log(s, AV_LOG_VERBOSE, "parser not found for codec "
@@ -1349,10 +1381,10 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                 st->parser->flags |= PARSER_FLAG_USE_CODEC_TS;
         }
 
-        if (!st->need_parsing || !st->parser) {
+        if (!st->need_parsing || !st->parser) {  //!< 不需要解析,或者parser为空时(即没有注册这种parser),就不需要parser包了,输出原始包数据
             /* no parsing needed: we just output the packet as is */
             *pkt = cur_pkt;
-            compute_pkt_fields(s, st, NULL, pkt);
+            compute_pkt_fields(s, st, NULL, pkt);  //!< 计算包的其它信息
             if ((s->iformat->flags & AVFMT_GENERIC_INDEX) &&
                 (pkt->flags & AV_PKT_FLAG_KEY) && pkt->dts != AV_NOPTS_VALUE) {
                 ff_reduce_index(s, st->index);
@@ -1361,7 +1393,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             }
             got_packet = 1;
         } else if (st->discard < AVDISCARD_ALL) {
-            if ((ret = parse_packet(s, &cur_pkt, cur_pkt.stream_index)) < 0)
+            if ((ret = parse_packet(s, &cur_pkt, cur_pkt.stream_index)) < 0)  //!< parse 当前packet
                 return ret;
         } else {
             /* free packet */
@@ -1445,7 +1477,30 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 
     return ret;
 }
-
+/**
+ * Return the next frame of a stream.
+ * This function returns what is stored in the file, and does not validate
+ * that what is there are valid frames for the decoder. It will split what is
+ * stored in the file into frames and return one for each call. It will not
+ * omit invalid data between valid frames so as to give the decoder the maximum
+ * information possible for decoding.
+ *
+ * If pkt->buf is NULL, then the packet is valid until the next
+ * av_read_frame() or until avformat_close_input(). Otherwise the packet
+ * is valid indefinitely. In both cases the packet must be freed with
+ * av_free_packet when it is no longer needed. For video, the packet contains
+ * exactly one frame. For audio, it contains an integer number of frames if each
+ * frame has a known fixed size (e.g. PCM or ADPCM data). If the audio frames
+ * have a variable size (e.g. MPEG audio), then it contains one frame.
+ *
+ * pkt->pts, pkt->dts and pkt->duration are always set to correct
+ * values in AVStream.time_base units (and guessed if the format cannot
+ * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
+ * has B-frames, so it is better to rely on pkt->dts if you do not
+ * decompress the payload.
+ *
+ * @return 0 if OK, < 0 on error or end of file
+ */
 int av_read_frame(AVFormatContext *s, AVPacket *pkt)
 {
     const int genpts = s->flags & AVFMT_FLAG_GENPTS;
@@ -1455,9 +1510,9 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt)
 
     if (!genpts) {
         ret = s->packet_buffer
-              ? read_from_packet_buffer(&s->packet_buffer,
+              ? read_from_packet_buffer(&s->packet_buffer,    //!< 若之前的buffer还没读完,则继续读完
                                         &s->packet_buffer_end, pkt)
-              : read_frame_internal(s, pkt);
+              : read_frame_internal(s, pkt);   //!< 该函数保证返回来的数据为整帧数据
         if (ret < 0)
             return ret;
         goto return_packet;
@@ -3461,7 +3516,7 @@ int av_find_best_stream(AVFormatContext *ic, enum AVMediaType type,
             nb_streams = p->nb_stream_indexes;
         }
     }
-    for (i = 0; i < nb_streams; i++) {
+    for (i = 0; i < nb_streams; i++) {    //!< 从音视频中寻找Vedio
         int real_stream_index = program ? program[i] : i;
         AVStream *st          = ic->streams[real_stream_index];
         AVCodecContext *avctx = st->codec;
@@ -3506,7 +3561,7 @@ int av_find_best_stream(AVFormatContext *ic, enum AVMediaType type,
     }
     if (decoder_ret)
         *decoder_ret = (AVCodec*)best_decoder;
-    return ret;
+    return ret;   //!< 返回视频流在音视频流中的id
 }
 
 /*******************************************************/

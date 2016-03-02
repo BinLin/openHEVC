@@ -45,25 +45,25 @@ typedef int (action_func)(AVCodecContext *c, void *arg);
 typedef int (action_func2)(AVCodecContext *c, void *arg, int jobnr, int threadnr);
 
 typedef struct SliceThreadContext {
-    pthread_t *workers;
-    action_func *func;
-    action_func2 *func2;
+    pthread_t *workers;   //!< 存储工作线程ID的数组,Slice并行拥有的线程
+    action_func *func;    //!< SLice解码函数
+    action_func2 *func2;  //!< WPP,多TIle模式下的解码函数
     void *args;
     int *rets;
     int rets_count;
-    int job_count;
+    int job_count;   //!< 允许工作的工作线程数量?
     int job_size;
 
-    pthread_cond_t last_job_cond;
-    pthread_cond_t current_job_cond;
-    pthread_mutex_t current_job_lock;
+    pthread_cond_t last_job_cond;  //!< 最后一个工作线程的状态
+    pthread_cond_t current_job_cond; //!< 当前工作线程的状态
+    pthread_mutex_t current_job_lock; //!< 当前工作线程上锁
     unsigned current_execute;
-    int current_job;
+    int current_job;  //!< 当前(能用的线程,包括等待)工作的Slice线程个数
     int done;
 
     int *entries;
     int entries_count;
-    int thread_count;
+    int thread_count;  //!< Slice 并行线程的个数
     pthread_cond_t *progress_cond;
     pthread_mutex_t *progress_mutex;
 } SliceThreadContext;
@@ -71,14 +71,14 @@ typedef struct SliceThreadContext {
 static void* attribute_align_arg worker(void *v)
 {
     AVCodecContext *avctx = v;
-    SliceThreadContext *c = avctx->internal->thread_ctx;
+    SliceThreadContext *c = avctx->internal->thread_ctx;   //!< Slice父线程结构体
     unsigned last_execute = 0;
-    int our_job = c->job_count;
+    int our_job = c->job_count;  //!< 初始化为0
     int thread_count = avctx->thread_count;
     int self_id;
 
     pthread_mutex_lock(&c->current_job_lock);
-    self_id = c->current_job++;
+    self_id = c->current_job++;  //Q< 表Slice级别的第几个线程
     for (;;){
         while (our_job >= c->job_count) {
             if (c->current_job == thread_count + c->job_count)
@@ -87,7 +87,7 @@ static void* attribute_align_arg worker(void *v)
             while (last_execute == c->current_execute && !c->done)
                 pthread_cond_wait(&c->current_job_cond, &c->current_job_lock);
             last_execute = c->current_execute;
-            our_job = self_id;
+            our_job = self_id;  //!< 当前工作线程的序号
 
             if (c->done) {
                 pthread_mutex_unlock(&c->current_job_lock);
@@ -130,7 +130,7 @@ void ff_slice_thread_free(AVCodecContext *avctx)
 static av_always_inline void thread_park_workers(SliceThreadContext *c, int thread_count)
 {
     while (c->current_job != thread_count + c->job_count)
-        pthread_cond_wait(&c->last_job_cond, &c->current_job_lock);
+        pthread_cond_wait(&c->last_job_cond, &c->current_job_lock);  //!< 等待最后一个线程准备完毕
     pthread_mutex_unlock(&c->current_job_lock);
 }
 
@@ -140,18 +140,18 @@ static int thread_execute(AVCodecContext *avctx, action_func* func, void *arg, i
     int dummy_ret;
 
     if (!(avctx->active_thread_type&FF_THREAD_SLICE) || avctx->thread_count <= 1)
-        return avcodec_default_execute(avctx, func, arg, ret, job_count, job_size);
+        return avcodec_default_execute(avctx, func, arg, ret, job_count, job_size);  //!< 单线程执行
 
     if (job_count <= 0)
         return 0;
-
+    //!< 以下是Slice级别多线程
     pthread_mutex_lock(&c->current_job_lock);
 
     c->current_job = avctx->thread_count;
     c->job_count = job_count;
     c->job_size = job_size;
     c->args = arg;
-    c->func = func;
+    c->func = func;   //!< 线程解码函数入口
     if (ret) {
         c->rets = ret;
         c->rets_count = job_count;
@@ -166,7 +166,7 @@ static int thread_execute(AVCodecContext *avctx, action_func* func, void *arg, i
 
     return 0;
 }
-
+//!< 多SLice级别并行函数入口
 static int thread_execute2(AVCodecContext *avctx, action_func2* func2, void *arg, int *ret, int job_count)
 {
     SliceThreadContext *c = avctx->internal->thread_ctx;
@@ -204,7 +204,7 @@ int ff_slice_thread_init(AVCodecContext *avctx)
     if (!c)
         return -1;
 
-    c->workers = av_mallocz_array(thread_count, sizeof(pthread_t));
+    c->workers = av_mallocz_array(thread_count, sizeof(pthread_t)); //!< pthread_t保存线程ID
     if (!c->workers) {
         av_free(c);
         return -1;
@@ -218,9 +218,9 @@ int ff_slice_thread_init(AVCodecContext *avctx)
     pthread_cond_init(&c->current_job_cond, NULL);
     pthread_cond_init(&c->last_job_cond, NULL);
     pthread_mutex_init(&c->current_job_lock, NULL);
-    pthread_mutex_lock(&c->current_job_lock);
-    for (i=0; i<thread_count; i++) {
-        if(pthread_create(&c->workers[i], NULL, worker, avctx)) {
+    pthread_mutex_lock(&c->current_job_lock);    //!< current_job_lock上锁
+    for (i=0; i<thread_count; i++) {   //!< 创建thread_count 个线程
+        if(pthread_create(&c->workers[i], NULL, worker, avctx)) {  //!< 创建线程失败,返回非零
            avctx->thread_count = i;
            pthread_mutex_unlock(&c->current_job_lock);
            ff_thread_free(avctx);

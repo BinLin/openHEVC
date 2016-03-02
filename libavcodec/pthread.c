@@ -39,23 +39,23 @@
  *
  * Threading requires more than one thread.
  * Frame threading requires entire frames to be passed to the codec,
- * and introduces extra decoding delay, so is incompatible with low_delay.
+ * and introduces extra decoding delay, so is incompatible with low_delay.(不适合low_delay)
  *
  * @param avctx The context.
  */
 static void validate_thread_parameters(AVCodecContext *avctx)
-{
+{    //!< 实现帧线程支持，需要在配置codec的时候设置codec的capabilities，flags，flags2
     int frame_threading_supported      = (avctx->codec->capabilities & CODEC_CAP_FRAME_THREADS)
                                         && !(avctx->flags  & CODEC_FLAG_TRUNCATED)
                                         && !(avctx->flags  & CODEC_FLAG_LOW_DELAY)
                                         && !(avctx->flags2 & CODEC_FLAG2_CHUNKS  );
-    int slice_threading_supported      = (avctx->codec->capabilities & CODEC_CAP_SLICE_THREADS);
-    int frameslice_threading_supported = slice_threading_supported && frame_threading_supported;
-
-    if (avctx->thread_count == 1) {
+    int slice_threading_supported      = (avctx->codec->capabilities & CODEC_CAP_SLICE_THREADS);  //!< 支持Slice级并行
+    int frameslice_threading_supported = slice_threading_supported && frame_threading_supported;  //!< 支持帧级,片级并行
+    //!< 多线程要运行在双核机器上
+    if (avctx->thread_count == 1) {  //!< 单核机器不支持
         avctx->active_thread_type = 0;
         avctx->thread_count_frame = 1;
-    } else if (frame_threading_supported     && (avctx->thread_type & FF_THREAD_FRAME)) {
+    } else if (frame_threading_supported     && (avctx->thread_type & FF_THREAD_FRAME)) { //!<  在codec初始化的时候设置avctx->thread_type |=FF_THREAD_FRAME
         avctx->active_thread_type = FF_THREAD_FRAME;
         avctx->thread_count_frame = avctx->thread_count;
         avctx->thread_count       = 1;
@@ -65,9 +65,9 @@ static void validate_thread_parameters(AVCodecContext *avctx)
     } else if(frameslice_threading_supported && (avctx->thread_type & FF_THREAD_FRAME_SLICE)) {
         avctx->thread_count        = avctx->thread_count ? avctx->thread_count : av_cpu_count()>>1;
         avctx->thread_count_frame  = FFMIN((av_cpu_count() / avctx->thread_count) + 1, MAX_AUTO_THREADS);
-        if (avctx->thread_count_frame > 1)
+        if (avctx->thread_count_frame > 1)  //!< 若支持个数多于一个frame,则同时支持frame,Slice级别解码
             avctx->active_thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
-        else
+        else   //!< 只支持Slice级别解码
             avctx->active_thread_type  = FF_THREAD_SLICE;
     } else if (!(avctx->codec->capabilities & CODEC_CAP_AUTO_THREADS)) {
         avctx->thread_count       = 1;
@@ -80,15 +80,15 @@ static void validate_thread_parameters(AVCodecContext *avctx)
                "Application has requested %d threads. Using a thread count greater than %d is not recommended.\n",
                avctx->thread_count, MAX_AUTO_THREADS);
 }
-
+//!< 判断是否并行,以及初始化
 int ff_thread_init(AVCodecContext *avctx)
 {
     int ret = 0;
 
-    validate_thread_parameters(avctx);
-
+    validate_thread_parameters(avctx);  //!< 判断是否支持并行,以及并行的类型; 初始化线程的数量
+    //!< 多线程初始化
     if (avctx->active_thread_type&FF_THREAD_FRAME)
-        ret = ff_frame_thread_init(avctx);
+        ret = ff_frame_thread_init(avctx);   //!< 包括frame级别初始化和Slice级别初始化(若支持)
     else if (avctx->active_thread_type&FF_THREAD_SLICE)
         ret = ff_slice_thread_init(avctx);
     av_log(avctx, AV_LOG_INFO, "nb threads_frame = %d, nb threads_slice %d, thread_type = %s%s \n",
